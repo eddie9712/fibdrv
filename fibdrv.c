@@ -6,7 +6,9 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
-
+#include <linux/string.h>
+#include <linux/uaccess.h>
+#include <linux/slab.h>
 MODULE_LICENSE("Dual MIT/GPL");
 MODULE_AUTHOR("National Cheng Kung University, Taiwan");
 MODULE_DESCRIPTION("Fibonacci engine driver");
@@ -17,26 +19,79 @@ MODULE_VERSION("0.1");
 /* MAX_LENGTH is set to 92 because
  * ssize_t can't fit the number > 92
  */
-#define MAX_LENGTH 92
+#define MAX_LENGTH 110
 
 static dev_t fib_dev = 0;
 static struct cdev *fib_cdev;
 static struct class *fib_class;
 static DEFINE_MUTEX(fib_mutex);
-
-static long long fib_sequence(long long k)
+static ktime_t kt;
+static void stringReverse(char *str)
 {
-    /* FIXME: use clz/ctz and fast algorithms to speed up */
-    long long f[k + 2];
+    char *p1, *p2;
+    int i = strlen(str);
+    for (p1 = str, p2 = str + i - 1; p2 > p1; ++p1, --p2) {
+        *p1 ^= *p2;
+        *p2 ^= *p1;
+        *p1 ^= *p2;
+    }
+}
+static void add_bignum(char *str, char *str1, char *str2)
+{
+    int n1 = strlen(str1);  // caculate the length of two strings
+    int n2 = strlen(str2);
 
-    f[0] = 0;
-    f[1] = 1;
-
-    for (int i = 2; i <= k; i++) {
-        f[i] = f[i - 1] + f[i - 2];
+    if (n1 > n2)  // let string2 the bigger number
+    {
+        char *temp = str1;
+        int swap;
+        str1 = str2;
+        str2 = temp;
+        swap = n1;  // swap n1,n2
+        n1 = n2;
+        n2 = swap;
+    }
+    stringReverse(str1);  // reverse two string
+    stringReverse(str2);
+    int carry = 0, i = 0;
+    for (i = 0; i < n1; i++)  // add each digit
+    {
+        int sum = ((str1[i] - '0') + (str2[i] - '0') + carry);
+        str[i] = (sum % 10 + '0');
+        carry = sum / 10;
+    }
+    for (i = n1; i < n2; i++)  // deal remaining digits
+    {
+        int sum = ((str2[i] - '0') + carry);
+        str[i] = (sum % 10 + '0');
+        carry = sum / 10;
     }
 
-    return f[k];
+    if (carry)  // deal remain carry
+    {
+        str[i] = carry + '0';
+    }
+    stringReverse(str1);  // reverse two string
+    stringReverse(str2);
+
+    stringReverse(str);
+}
+
+static void fib_sequence(char **f, long long k)
+{
+    kt = ktime_get();
+    /* FIXME: use clz/ctz and fast algorithms to speed up */
+    int i;
+    for (i = 0; i < k + 2; i++) {
+        f[i] = kmalloc(sizeof(char) * 50, GFP_KERNEL);
+        strncpy(f[i], "\0", 50);  // initialize
+    }
+    strncpy(f[0], "0", 50);
+    strncpy(f[1], "1", 50);
+    for (int j = 2; j <= k; j++) {
+        add_bignum(f[j], f[j - 1], f[j - 2]);
+    }
+    kt = ktime_sub(ktime_get(), kt);
 }
 
 static int fib_open(struct inode *inode, struct file *file)
@@ -60,7 +115,14 @@ static ssize_t fib_read(struct file *file,
                         size_t size,
                         loff_t *offset)
 {
-    return (ssize_t) fib_sequence(*offset);
+    char *str[(*offset) + 2];
+    fib_sequence(str, *offset);
+    copy_to_user(buf, str[*offset], 50);
+    for (int i = 0; i < (*offset) + 2; i++)  // free the memory
+    {
+        kfree(str[i]);
+    }
+    return 1;
 }
 
 /* write operation is skipped */
@@ -69,7 +131,7 @@ static ssize_t fib_write(struct file *file,
                          size_t size,
                          loff_t *offset)
 {
-    return 1;
+    return ktime_to_ns(kt);
 }
 
 static loff_t fib_device_lseek(struct file *file, loff_t offset, int orig)
@@ -86,7 +148,6 @@ static loff_t fib_device_lseek(struct file *file, loff_t offset, int orig)
         new_pos = MAX_LENGTH - offset;
         break;
     }
-
     if (new_pos > MAX_LENGTH)
         new_pos = MAX_LENGTH;  // max case
     if (new_pos < 0)
@@ -109,7 +170,6 @@ static int __init init_fib_dev(void)
     int rc = 0;
 
     mutex_init(&fib_mutex);
-
     // Let's register the device
     // This will dynamically allocate the major number
     rc = alloc_chrdev_region(&fib_dev, 0, 1, DEV_FIBONACCI_NAME);

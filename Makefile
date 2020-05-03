@@ -23,9 +23,10 @@ load:
 	sudo insmod $(TARGET_MODULE).ko
 unload:
 	sudo rmmod $(TARGET_MODULE) || true >/dev/null
-
 client: client.c
 	$(CC) -o $@ $^
+test: test.c
+	$(CC) -o $@ $^ -lpthread
 
 PRINTF = env printf
 PASS_COLOR = \e[32;01m
