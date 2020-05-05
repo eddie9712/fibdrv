@@ -5,6 +5,7 @@ set title 'fibonacci number'
 set term png enhanced font 'Verdana,10'
 set output 'output3.png'
 set xtic 10
+set ytic 5000
 set  key left
 
 plot [:120][:80000]'correct.txt' using 1:2 with points title 'userspace'  ,\

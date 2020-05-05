@@ -36,21 +36,26 @@ static void stringReverse(char *str)
         *p1 ^= *p2;
     }
 }
-static void add_bignum(char *str, char *str1, char *str2)
+static void add_bignum(char *str,
+                       char *cp1,
+                       char *cp2)  //*cp2 should be longer than cp1
 {
+    char str1[50];
+    char str2[50];
+    strncpy(str1, cp1, 50);
+    strncpy(str2, cp2, 50);
     int n1 = strlen(str1);  // caculate the length of two strings
     int n2 = strlen(str2);
-
-    if (n1 > n2)  // let string2 the bigger number
-    {
-        char *temp = str1;
-        int swap;
-        str1 = str2;
-        str2 = temp;
-        swap = n1;  // swap n1,n2
-        n1 = n2;
-        n2 = swap;
-    }
+    // if(n1>n2)   //let string2 the bigger number
+    // {
+    //   char *temp=str1;
+    //   int swap;
+    //   str1=str2;
+    //   str2=temp;
+    //   swap=n1; //swap n1,n2
+    //   n1=n2;
+    //   n2=swap;
+    // }
     stringReverse(str1);  // reverse two string
     stringReverse(str2);
     int carry = 0, i = 0;
@@ -66,34 +71,141 @@ static void add_bignum(char *str, char *str1, char *str2)
         str[i] = (sum % 10 + '0');
         carry = sum / 10;
     }
-
     if (carry)  // deal remain carry
     {
         str[i] = carry + '0';
     }
-    stringReverse(str1);  // reverse two string
-    stringReverse(str2);
-
     stringReverse(str);
 }
+static void sub_bignum(char *str,
+                       char *str1,
+                       char *str2)  // string 1 should be  bigger  than str2
+{
+    char cp1[50], cp2[50];
+    strncpy(cp1, str1, 50);  // avoid to change  the original value
+    strncpy(cp2, str2, 50);
+    int n1 = strlen(cp1);  // caculate the length of two strings
+    int n2 = strlen(cp2);
+    stringReverse(cp1);  // reverse two string
+    stringReverse(cp2);
+    int i;
+    for (i = 0; i < n2; i++) {
+        int borrow = 0;
+        if (cp1[i] < cp2[i])  // borrow
+            borrow = 1;
+        int sum = cp1[i] - cp2[i];
+        str[i] = sum + '0';
+        if (borrow == 1) {
+            str[i] = sum + '\n' + '0';
+            cp1[i + 1] -= ('2' - '1');  // let str[i+1] minus one
+        }
+    }
 
-static void fib_sequence(char **f, long long k)
+    for (i = n2; i < n1; i++)  // remain part
+    {
+        str[i] = cp1[i];
+    }
+    while (str[n2] == '0' || str[n2] == '\0')  // get rid of leading zero
+    {
+        str[n2] = '\0';
+        n2--;
+    }
+    stringReverse(str);
+}
+static void mult_bignum(char *str,
+                        char *str1,
+                        char *str2)  // multiply big numbers
+{
+    int l1 = strlen(str1);
+    int l2 = strlen(str2);
+
+    int result[50] = {0};
+    // Below two indexes are used to find positions
+    // in result.
+    int i_n1 = 0;
+    // Go from right to left in str1
+    for (int i = l1 - 1; i >= 0; i--) {
+        int carry = 0;
+        int n1 = str1[i] - '0';
+        // To shift position to left after every
+        // multiplication of a digit in str2
+        int i_n2 = 0;
+
+
+        // Go from right to left in num2
+        for (int j = l2 - 1; j >= 0; j--) {
+            // Take current digit of second number
+            int n2 = str2[j] - '0';
+
+            // Multiply with current digit of first number
+            // and add result to previously stored result
+            // at current position.
+            int sum = n1 * n2 + result[i_n1 + i_n2] + carry;
+            // Carry for next iteration
+            carry = sum / 10;
+            // Store result
+            result[i_n1 + i_n2] = sum % 10;
+
+            i_n2++;
+        }
+
+        // store carry in next cell
+        if (carry > 0)
+            result[i_n1 + i_n2] += carry;
+        // To shift position to left after every
+        // multiplication of a digit in num1.
+        i_n1++;
+    }
+    // ignore '0's from the right
+    int i = 49;
+    while (i >= 0 && result[i] == 0)
+        i--;  // first non-zero term
+    if (i != -1) {
+        // generate the result string
+        while (i >= 0) {
+            str[i] = result[i] + '0';
+            i--;
+        }
+        stringReverse(str);
+    } else {
+        strncpy(str, "0", 50);
+    }
+}
+static void fib_sequence(char *a, long long k)
 {
     kt = ktime_get();
-    /* FIXME: use clz/ctz and fast algorithms to speed up */
-    int i;
-    for (i = 0; i < k + 2; i++) {
-        f[i] = kmalloc(sizeof(char) * 50, GFP_KERNEL);
-        strncpy(f[i], "\0", 50);  // initialize
-    }
-    strncpy(f[0], "0", 50);
-    strncpy(f[1], "1", 50);
-    for (int j = 2; j <= k; j++) {
-        add_bignum(f[j], f[j - 1], f[j - 2]);
+    unsigned int h = 0;
+
+    for (unsigned int i = k; i; ++h, i >>= 1)
+        ;
+
+    char b[50];
+    strncpy(a, "0", 50);  // F(0)=0
+    strncpy(b, "1", 50);  // F(1)=1
+
+    for (int j = h - 1; j >= 0; --j) {
+        char c[50] = {'\0'};
+        char d[50] = {'\0'};
+        char temp[50] = {'\0'};
+
+        mult_bignum(c, b, "2");  // get c
+        sub_bignum(c, c, a);
+        mult_bignum(c, c, a);
+
+        mult_bignum(d, a, a);  // get d
+        mult_bignum(temp, b, b);
+        add_bignum(d, d, temp);
+
+        if ((k >> j) & 1) {
+            strncpy(a, d, 50);
+            add_bignum(b, c, d);
+        } else {
+            strncpy(a, c, 50);
+            strncpy(b, d, 50);
+        }
     }
     kt = ktime_sub(ktime_get(), kt);
 }
-
 static int fib_open(struct inode *inode, struct file *file)
 {
     if (!mutex_trylock(&fib_mutex)) {
@@ -115,13 +227,9 @@ static ssize_t fib_read(struct file *file,
                         size_t size,
                         loff_t *offset)
 {
-    char *str[(*offset) + 2];
+    char str[50] = {'\0'};
     fib_sequence(str, *offset);
-    copy_to_user(buf, str[*offset], 50);
-    for (int i = 0; i < (*offset) + 2; i++)  // free the memory
-    {
-        kfree(str[i]);
-    }
+    copy_to_user(buf, str, 50);
     return 1;
 }
 
