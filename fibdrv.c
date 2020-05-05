@@ -46,16 +46,6 @@ static void add_bignum(char *str,
     strncpy(str2, cp2, 50);
     int n1 = strlen(str1);  // caculate the length of two strings
     int n2 = strlen(str2);
-    // if(n1>n2)   //let string2 the bigger number
-    // {
-    //   char *temp=str1;
-    //   int swap;
-    //   str1=str2;
-    //   str2=temp;
-    //   swap=n1; //swap n1,n2
-    //   n1=n2;
-    //   n2=swap;
-    // }
     stringReverse(str1);  // reverse two string
     stringReverse(str2);
     int carry = 0, i = 0;
@@ -175,9 +165,12 @@ static void fib_sequence(char *a, long long k)
 {
     kt = ktime_get();
     unsigned int h = 0;
-
-    for (unsigned int i = k; i; ++h, i >>= 1)
-        ;
+    if (k != 0) {
+        h = __builtin_clz(k);
+    } else
+        h = 0;
+    // h=0;
+    // for (unsigned int i = k; i; ++h, i >>= 1);
 
     char b[50];
     strncpy(a, "0", 50);  // F(0)=0
